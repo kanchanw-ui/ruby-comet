@@ -1,0 +1,73 @@
+Here's an analysis of the video and a generated bug report:
+
+---
+
+**Video Analysis:**
+
+The video demonstrates a user navigating through a web application. Several performance and UI rendering issues are observed:
+
+1.  **Notification Dismissal and Dashboard Refresh (0:00 - 0:03):** Upon dismissing the "Locations Requiring Verification Notification" by clicking "OK", the entire "Home" dashboard refreshes, indicated by a full-screen loading spinner. This seems unnecessary as dismissing a notification typically shouldn't trigger a full content reload of the underlying page.
+2.  **Slow "Recalls" Page Load (0:04 - 0:12):** Clicking "Recalls" in the left navigation causes a prolonged loading state (approx. 8 seconds) before the "Recalls" table data is displayed.
+3.  **Slow "New Recall" Form Load and Premature Spinner Disappearance (0:13 - 0:21):**
+    *   Clicking "New" from the "Recalls" page results in another significant loading delay (approx. 7-8 seconds of spinner).
+    *   Crucially, the loading spinner disappears around the 0:18 mark, but the page content (specifically the "Description" and "Risk to Health" rich text editors and the vertical scrollbar) are still visibly rendering for several more seconds. This gives a false impression that the page has finished loading before it's actually ready for user interaction.
+
+---
+
+**Bug Report:**
+
+**Bug ID:** #001 (or next available ID)
+**Title:** Loading spinner disappears prematurely while "New Recall" form content is still rendering, causing a delayed user experience.
+
+**Severity:** High (Impacts user experience, perceived performance, and potential for interaction with unrendered elements.)
+**Priority:** High
+
+**Environment:**
+*   **Application:** Sphere App (as seen in header)
+*   **Browser:** (Not specified in video, assume common modern browser like Chrome, Firefox, Edge)
+*   **Operating System:** (Not specified in video)
+
+**Description:**
+When navigating to the "New Recall" page, a loading spinner is displayed for several seconds. However, the spinner vanishes *before* all form elements, particularly the rich text editor fields ("Description" and "Risk to Health") and the page's scrollbar, have fully rendered and are ready for user interaction. This creates a confusing and frustrating user experience where the page appears loaded but is still actively populating.
+
+**Steps to Reproduce:**
+1.  Navigate to the "Home" dashboard (after dismissing the initial notification).
+2.  Click on "Recalls" from the left navigation menu.
+3.  Wait for the "Recalls" page to load its content (approx. 8 seconds).
+4.  Click the "New" button (located at the top right of the "Recalls" page, implied by the video).
+
+**Expected Result:**
+The loading spinner should remain visible until all elements of the "New Recall" form, including text areas, buttons, and scrollbars, have completely rendered and the page is fully interactive. The page should present a complete and stable state immediately after the spinner disappears.
+
+**Actual Result:**
+The loading spinner disappears around the 0:18 mark in the video, but the "Description" and "Risk to Health" rich text editor fields, along with the vertical scrollbar, are still visibly rendering and appearing on the screen for several more seconds (until approximately 0:21). This makes the page appear incomplete and non-interactive for a noticeable period after the spinner has gone.
+
+**Attachments:**
+*   Video recording (provided) - refer to timestamps 0:13 - 0:21.
+
+---
+
+**Additional Bugs (for separate reports if desired, or can be noted as related issues):**
+
+**Bug ID:** #002
+**Title:** Significant delay observed when loading the "Recalls" page.
+**Severity:** Medium
+**Description:** After clicking on "Recalls" from the left navigation, the page takes an extended period (approximately 8 seconds) to load the table data.
+**Steps to Reproduce:**
+1.  Navigate to the "Home" dashboard.
+2.  Click on "Recalls" in the left navigation.
+**Expected Result:** The "Recalls" page should load and display its content within a reasonable timeframe (e.g., 1-3 seconds, depending on data volume and server responsiveness).
+**Actual Result:** The "Recalls" page displays a loading spinner for approximately 8 seconds before content appears (refer to 0:04 - 0:12 in the video).
+
+---
+
+**Bug ID:** #003
+**Title:** Dismissing "Locations Requiring Verification Notification" triggers an unnecessary full page refresh on the Home dashboard.
+**Severity:** Low (Minor annoyance, but indicates inefficient UI behavior.)
+**Description:** After clicking "OK" on the "Locations Requiring Verification Notification" popup, the entire Home dashboard content area undergoes a full refresh, displaying a loading spinner over existing content.
+**Steps to Reproduce:**
+1.  Log in to the application (or arrive at the Home dashboard where the notification pops up).
+2.  Wait for the "Locations Requiring Verification Notification" popup to appear.
+3.  Click the "OK" button on the popup.
+**Expected Result:** Dismissing the notification should only close the popup. The underlying Home dashboard content should remain static unless an actual data change or refresh is explicitly initiated by the user or system, which is not implied by dismissing a notification.
+**Actual Result:** The Home dashboard displays a loading spinner and appears to perform a full content refresh after the notification is dismissed (refer to 0:00 - 0:03 in the video).

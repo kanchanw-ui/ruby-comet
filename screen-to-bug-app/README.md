@@ -2,23 +2,30 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+### 1. Configure Supabase
+
+1. Create a new Supabase project.
+2. Create a storage bucket named `recordings` for uploaded `.webm` screen recordings.
+3. Run the SQL in `supabase/schema.sql` against your Supabase database to create the `recordings` and `bug_reports` tables.
+
+### 2. Environment variables
+
+Configure the following environment variables (e.g., in a `.env.local` file locally and in Vercel for deployment):
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+GOOGLE_GENERATIVE_AI_API_KEY=your-gemini-api-key
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 3. Install dependencies and run dev server
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Then open [http://localhost:3000](http://localhost:3000) with your browser.
 
 ## Learn More
 
