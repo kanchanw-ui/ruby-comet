@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 import JiraSettings from "@/components/JiraSettings";
 import AzureDevOpsSettings from "@/components/AzureDevOpsSettings";
+import GitHubSettings from "@/components/GitHubSettings";
 
 interface BugReport {
   id: string;
@@ -14,6 +15,8 @@ interface BugReport {
   severity: string | null;
   jira_issue_key: string | null;
   ado_work_item_id: string | null;
+  github_issue_number: number | null;
+  github_repo_full_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -27,12 +30,14 @@ export default function ReportDetailPage() {
   const [saving, setSaving] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [pushingADO, setPushingADO] = useState(false);
+  const [pushingGitHub, setPushingGitHub] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
   const [editedSeverity, setEditedSeverity] = useState("");
   const [editedMarkdown, setEditedMarkdown] = useState("");
   const [copySuccess, setCopySuccess] = useState(false);
   const [jiraLink, setJiraLink] = useState<string | null>(null);
   const [adoLink, setAdoLink] = useState<string | null>(null);
+  const [githubLink, setGithubLink] = useState<string | null>(null);
 
   useEffect(() => {
     if (reportId) {
@@ -119,6 +124,28 @@ export default function ReportDetailPage() {
     }
   };
 
+  const handlePushToGitHub = async () => {
+    setPushingGitHub(true);
+    try {
+      const response = await fetch("/api/github/create-issue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reportId }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Failed to push to GitHub");
+
+      setGithubLink(result.url);
+      await loadReport();
+    } catch (error: any) {
+      console.error("GitHub push error:", error);
+      alert(error.message);
+    } finally {
+      setPushingGitHub(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!supabase) return;
     setSaving(true);
@@ -196,6 +223,7 @@ ${editedMarkdown}
           <div className="flex items-center gap-4">
             <JiraSettings />
             <AzureDevOpsSettings />
+            <GitHubSettings />
             <div className="text-zinc-600 text-[10px] uppercase tracking-widest font-bold">
               Last Sync: {new Date(report.updated_at).toLocaleTimeString()}
             </div>
@@ -291,6 +319,30 @@ ${editedMarkdown}
                     {report.ado_work_item_id && adoLink && (
                       <a href={adoLink} target="_blank" className="block text-center text-[10px] text-sky-400 hover:underline">
                         View ADO Work Item #{report.ado_work_item_id} →
+                      </a>
+                    )}
+
+                    {/* GitHub Section */}
+                    <button
+                      onClick={handlePushToGitHub}
+                      disabled={pushingGitHub || !!report.github_issue_number}
+                      className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-white font-bold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                    >
+                      {pushingGitHub ? (
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : report.github_issue_number ? (
+                        "✓ Pushed to GitHub"
+                      ) : (
+                        "Push to GitHub"
+                      )}
+                    </button>
+                    {report.github_issue_number && (
+                      <a
+                        href={githubLink || `https://github.com/${report.github_repo_full_name}/issues/${report.github_issue_number}`}
+                        target="_blank"
+                        className="block text-center text-slate-400 hover:underline text-[10px]"
+                      >
+                        View Issue #{report.github_issue_number} on GitHub →
                       </a>
                     )}
 

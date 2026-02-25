@@ -1,6 +1,7 @@
 import Link from "next/link";
 import JiraSettings from "@/components/JiraSettings";
 import AzureDevOpsSettings from "@/components/AzureDevOpsSettings";
+import GitHubSettings from "@/components/GitHubSettings";
 
 export default function Home() {
   return (
@@ -26,6 +27,7 @@ export default function Home() {
           <div className="flex items-center gap-3">
             <JiraSettings />
             <AzureDevOpsSettings />
+            <GitHubSettings />
           </div>
           <Link
             href="/record"
