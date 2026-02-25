@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
 
     // Call Gemini 2.5 Flash
     console.log("Calling Gemini API...");
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const prompt = `Analyze this screen recording video and generate a structured bug report in markdown format.
 
@@ -101,6 +101,13 @@ Format your response as markdown with clear sections. Keep the Actual and Expect
       severity = severityMatch[1];
     }
 
+    // Generate public URL for the recording
+    const { data: urlData } = supabase.storage
+      .from("recordings")
+      .getPublicUrl(recording.storage_path);
+
+    const final_markdown = `${markdown}\n\n---\n### 📹 Attachment: Screen Recording\n[View Video](${urlData.publicUrl})`;
+
     // Create bug report
     console.log("Saving bug report to DB...");
     const { data: bugReport, error: bugReportError } = await supabase
@@ -108,7 +115,7 @@ Format your response as markdown with clear sections. Keep the Actual and Expect
       .insert({
         recording_id: recordingId,
         title: recording.title || "Untitled Bug Report",
-        raw_markdown: markdown,
+        raw_markdown: final_markdown,
         severity: severity,
       })
       .select()

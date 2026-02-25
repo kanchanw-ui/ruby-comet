@@ -24,7 +24,7 @@ async function run() {
     const base64Video = Buffer.from(arrayBuffer).toString('base64');
 
     console.log('Calling Gemini 2.5 Flash...');
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const prompt = "Analyze this video and generate a bug report.";
 
     try {

@@ -10,6 +10,7 @@ import GitHubSettings from "@/components/GitHubSettings";
 
 interface BugReport {
   id: string;
+  recording_id: string;
   title: string | null;
   raw_markdown: string;
   severity: string | null;
@@ -19,6 +20,9 @@ interface BugReport {
   github_repo_full_name: string | null;
   created_at: string;
   updated_at: string;
+  recording?: {
+    storage_path: string;
+  };
 }
 
 export default function ReportDetailPage() {
@@ -37,6 +41,7 @@ export default function ReportDetailPage() {
   const [copySuccess, setCopySuccess] = useState(false);
   const [jiraLink, setJiraLink] = useState<string | null>(null);
   const [adoLink, setAdoLink] = useState<string | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [githubLink, setGithubLink] = useState<string | null>(null);
 
   useEffect(() => {
@@ -53,7 +58,7 @@ export default function ReportDetailPage() {
     try {
       const { data, error } = await supabase
         .from("bug_reports")
-        .select("*")
+        .select("*, recording:recordings(*)")
         .eq("id", reportId)
         .single();
 
@@ -63,6 +68,13 @@ export default function ReportDetailPage() {
         setEditedTitle(data.title || "");
         setEditedSeverity(data.severity || "");
         setEditedMarkdown(data.raw_markdown || "");
+
+        if (data.recording?.storage_path) {
+          const { data: urlData } = supabase.storage
+            .from("recordings")
+            .getPublicUrl(data.recording.storage_path);
+          setVideoUrl(urlData.publicUrl);
+        }
       }
     } catch (error) {
       console.error("Error loading report:", error);
@@ -233,7 +245,32 @@ ${editedMarkdown}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
+            {videoUrl && (
+              <div className="bg-zinc-900/50 border border-zinc-800 rounded-3xl overflow-hidden backdrop-blur-sm shadow-2xl group">
+                <div className="p-4 border-b border-zinc-800/50 flex items-center justify-between bg-zinc-900/30">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Recording Playback</span>
+                  </div>
+                  <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest">
+                    Source: Supabase Cloud
+                  </div>
+                </div>
+                <div className="aspect-video bg-black relative">
+                  <video
+                    src={videoUrl}
+                    controls
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-8 backdrop-blur-sm">
+              <div className="mb-4 flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">AI Analysis & Markdown</span>
+                <span className="text-[10px] text-zinc-600 font-mono">UTF-8 Encoded</span>
+              </div>
               <textarea
                 value={editedMarkdown}
                 onChange={(e) => setEditedMarkdown(e.target.value)}

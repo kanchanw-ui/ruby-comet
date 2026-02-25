@@ -124,8 +124,11 @@ export default function ReportsPage() {
                         {new Date(report.created_at).toLocaleDateString()}
                       </span>
                     </div>
-                    <h2 className="text-xl font-bold text-white group-hover:text-blue-400 transition-colors line-clamp-1">
+                    <h2 className="text-xl font-bold text-white group-hover:text-blue-400 transition-colors line-clamp-1 flex items-center gap-2">
                       {report.title || "Untitled Bug Report"}
+                      {report.recording && (
+                        <span className="text-zinc-500 animate-pulse text-sm">📹</span>
+                      )}
                     </h2>
                   </div>
 
