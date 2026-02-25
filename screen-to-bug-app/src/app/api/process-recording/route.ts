@@ -1,13 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, Part } from "@google/generative-ai";
+import { GoogleAIFileManager } from "@google/generative-ai/server";
+
+// Vercel max function duration (seconds). 60 works on hobby, 300 on pro.
+export const maxDuration = 60;
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseServiceKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const geminiApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY!;
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const genAI = new GoogleGenerativeAI(geminiApiKey);
+const fileManager = new GoogleAIFileManager(geminiApiKey);
+
+const PROMPT = `Analyze this screen recording video and generate a structured bug report in markdown format.
+
+Please extract:
+1. **Steps to Reproduce**: An ordered list of the key user interactions shown in the video that lead to the issue.
+2. **Actual Result**: Use a minimal bulleted list to describe what actually happened (error messages, visual glitches, unexpected behavior).
+3. **Expected Result**: Use a minimal bulleted list to describe what should have happened.
+4. **Visual Symptoms**: Any error dialogs, UI glitches, crashes, or other visual indicators of the problem.
+5. **Severity**: Classify as "Critical", "Major", or "Minor" with a brief justification.
+
+Format your response as markdown with clear sections. Keep the Actual and Expected results extremely concise.`;
 
 export async function POST(request: NextRequest) {
   console.log("Starting recording process...");
@@ -39,56 +57,91 @@ export async function POST(request: NextRequest) {
 
     console.log("Recording metadata found:", recording.storage_path);
 
-    // Update status to processing
+    // Update status to ai_complete (processing started)
     await supabase
       .from("recordings")
       .update({ status: "ai_complete" })
       .eq("id", recordingId);
 
-    // Download video from Supabase Storage
-    console.log("Downloading video from storage...");
-    const { data: videoData, error: downloadError } = await supabase.storage
+    // Get public URL for the video in Supabase Storage
+    const { data: urlData } = supabase.storage
       .from("recordings")
-      .download(recording.storage_path);
+      .getPublicUrl(recording.storage_path);
+    const videoPublicUrl = urlData.publicUrl;
+    console.log("Video public URL:", videoPublicUrl);
 
-    if (downloadError || !videoData) {
-      console.error("Storage download error:", downloadError);
-      return NextResponse.json(
-        { error: "Failed to download recording" },
-        { status: 500 }
-      );
-    }
+    let videoPart: Part;
 
-    console.log("Video downloaded, size:", videoData.size);
+    try {
+      // Strategy 1: Upload via URL to Gemini File API (preferred - avoids large base64 in memory)
+      console.log("Fetching video to upload to Gemini File API...");
+      const videoResponse = await fetch(videoPublicUrl);
+      if (!videoResponse.ok) throw new Error(`Fetch failed: ${videoResponse.status}`);
 
-    // Convert blob to base64 for Gemini
-    const arrayBuffer = await videoData.arrayBuffer();
-    const base64Video = Buffer.from(arrayBuffer).toString("base64");
+      const videoBuffer = await videoResponse.arrayBuffer();
+      const videoBlob = new Blob([videoBuffer], { type: "video/webm" });
+      const videoFile = new File([videoBlob], "recording.webm", { type: "video/webm" });
 
-    // Call Gemini 2.5 Flash
-    console.log("Calling Gemini API...");
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      console.log("Uploading to Gemini File API, size:", videoBuffer.byteLength);
+      const uploadResult = await fileManager.uploadFile(videoFile as any, {
+        mimeType: "video/webm",
+        displayName: `recording-${recordingId}`,
+      });
 
-    const prompt = `Analyze this screen recording video and generate a structured bug report in markdown format.
+      console.log("Gemini File API upload complete. URI:", uploadResult.file.uri);
 
-Please extract:
-1. **Steps to Reproduce**: An ordered list of the key user interactions shown in the video that lead to the issue.
-2. **Actual Result**: Use a minimal bulleted list to describe what actually happened (error messages, visual glitches, unexpected behavior).
-3. **Expected Result**: Use a minimal bulleted list to describe what should have happened.
-4. **Visual Symptoms**: Any error dialogs, UI glitches, crashes, or other visual indicators of the problem.
-5. **Severity**: Classify as "Critical", "Major", or "Minor" with a brief justification.
+      // Wait for file to be ACTIVE
+      let file = uploadResult.file;
+      let waitMs = 0;
+      while (file.state === "PROCESSING" && waitMs < 30000) {
+        await new Promise((r) => setTimeout(r, 2000));
+        waitMs += 2000;
+        file = await fileManager.getFile(file.name);
+        console.log("File state:", file.state);
+      }
 
-Format your response as markdown with clear sections. Keep the Actual and Expected results extremely concise.`;
+      if (file.state !== "ACTIVE") {
+        throw new Error(`File not active after wait. State: ${file.state}`);
+      }
 
-    const result = await model.generateContent([
-      prompt,
-      {
+      videoPart = {
+        fileData: {
+          fileUri: file.uri,
+          mimeType: "video/webm",
+        },
+      };
+    } catch (fileApiError) {
+      // Strategy 2: Fallback to inline base64 (smaller videos only)
+      console.warn("File API failed, falling back to inline base64:", fileApiError);
+      const { data: videoData, error: downloadError } = await supabase.storage
+        .from("recordings")
+        .download(recording.storage_path);
+
+      if (downloadError || !videoData) {
+        console.error("Storage download error:", downloadError);
+        return NextResponse.json(
+          { error: "Failed to download recording" },
+          { status: 500 }
+        );
+      }
+
+      const arrayBuffer = await videoData.arrayBuffer();
+      const base64Video = Buffer.from(arrayBuffer).toString("base64");
+      console.log("Fallback base64 size:", base64Video.length);
+
+      videoPart = {
         inlineData: {
           data: base64Video,
           mimeType: "video/webm",
         },
-      },
-    ]);
+      };
+    }
+
+    // Call Gemini 1.5 Flash
+    console.log("Calling Gemini API...");
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const result = await model.generateContent([PROMPT, videoPart]);
 
     const response = await result.response;
     const markdown = response.text();
@@ -101,12 +154,8 @@ Format your response as markdown with clear sections. Keep the Actual and Expect
       severity = severityMatch[1];
     }
 
-    // Generate public URL for the recording
-    const { data: urlData } = supabase.storage
-      .from("recordings")
-      .getPublicUrl(recording.storage_path);
-
-    const final_markdown = `${markdown}\n\n---\n### 📹 Attachment: Screen Recording\n[View Video](${urlData.publicUrl})`;
+    // Append video link to the markdown
+    const final_markdown = `${markdown}\n\n---\n### 📹 Attachment: Screen Recording\n[▶ View Original Recording](${videoPublicUrl})`;
 
     // Create bug report
     console.log("Saving bug report to DB...");
@@ -141,7 +190,7 @@ Format your response as markdown with clear sections. Keep the Actual and Expect
   } catch (error) {
     console.error("Crucial error in processing pipeline:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Internal server error", details: String(error) },
       { status: 500 }
     );
   }

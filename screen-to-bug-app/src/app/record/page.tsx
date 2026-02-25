@@ -13,7 +13,7 @@ export default function RecordPage() {
   const [timeRemaining, setTimeRemaining] = useState(MAX_RECORDING_DURATION_MS);
   const [recordingTitle, setRecordingTitle] = useState("");
   const [uploadStatus, setUploadStatus] = useState<
-    "idle" | "uploading" | "success" | "error"
+    "idle" | "uploading" | "processing_ai" | "success" | "error"
   >("idle");
   const [recordingId, setRecordingId] = useState<string | null>(null);
 
@@ -121,7 +121,7 @@ export default function RecordPage() {
       const fileName = `recording-${Date.now()}.webm`;
       const filePath = `recordings/${fileName}`;
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from("recordings")
         .upload(filePath, blob, {
           contentType: "video/webm",
@@ -143,14 +143,23 @@ export default function RecordPage() {
       if (dbError) throw dbError;
 
       setRecordingId(recordingData.id);
-      setUploadStatus("success");
+      setUploadStatus("processing_ai");
       setRecordingTitle("");
 
-      fetch("/api/process-recording", {
+      // Await AI processing — this can take 30–60 seconds
+      const aiResponse = await fetch("/api/process-recording", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ recordingId: recordingData.id }),
-      }).catch((err) => console.error("AI trigger error:", err));
+      });
+
+      if (!aiResponse.ok) {
+        const err = await aiResponse.json().catch(() => ({}));
+        console.error("AI processing error:", err);
+        // Still show success — recording is saved, report may come later
+      }
+
+      setUploadStatus("success");
     } catch (error) {
       console.error("Upload error:", error);
       setUploadStatus("error");
@@ -247,6 +256,26 @@ export default function RecordPage() {
             <div className="text-center py-16 space-y-4">
               <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
               <p className="text-zinc-400 animate-pulse">Uploading to cloud...</p>
+            </div>
+          )}
+
+          {uploadStatus === "processing_ai" && (
+            <div className="text-center py-16 space-y-6">
+              <div className="relative mx-auto w-16 h-16">
+                <div className="absolute inset-0 rounded-full border-4 border-purple-600/30" />
+                <div className="absolute inset-0 rounded-full border-4 border-purple-600 border-t-transparent animate-spin" />
+                <div className="absolute inset-0 flex items-center justify-center text-2xl">✨</div>
+              </div>
+              <div>
+                <p className="text-white font-bold text-lg">AI is Analyzing Your Recording</p>
+                <p className="text-zinc-400 text-sm mt-2">Gemini is watching the video and writing your bug report...</p>
+                <p className="text-zinc-600 text-xs mt-3">This usually takes 30–60 seconds. Please keep this tab open.</p>
+              </div>
+              <div className="flex items-center justify-center gap-1.5 text-purple-400">
+                <div className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                <div className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
             </div>
           )}
 
