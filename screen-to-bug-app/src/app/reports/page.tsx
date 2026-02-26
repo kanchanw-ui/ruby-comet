@@ -42,7 +42,13 @@ export default function ReportsPage() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setReports(data || []);
+      const normalized = (data || []).map((row) => ({
+        ...row,
+        recording: Array.isArray(row.recording)
+          ? row.recording[0] ?? { status: "unknown" }
+          : row.recording ?? { status: "unknown" },
+      }));
+      setReports(normalized as BugReport[]);
     } catch (error) {
       console.error("Error loading reports:", error);
     } finally {
@@ -141,10 +147,7 @@ export default function ReportsPage() {
                       </span>
                     )}
                     <span className="px-3 py-1 rounded-full text-xs font-medium bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
-                      {getStatusLabel(
-                        (report.recording as { status: string })?.status ||
-                          "unknown"
-                      )}
+                      {getStatusLabel(report.recording?.status ?? "unknown")}
                     </span>
                   </div>
                 </div>
