@@ -200,46 +200,70 @@ export default function RecordPage() {
     const genAI = new GoogleGenerativeAI(key);
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-    // Use inline base64 in the browser (no File API / Node APIs)
     const base64 = await blobToBase64(blob);
 
-    const result = await model.generateContent([
-      GEMINI_PROMPT,
-      {
-        inlineData: {
-          data: base64,
-          mimeType: "video/webm",
-        },
-      },
-    ]);
+    const maxRetries = 3;
+    let lastError: unknown;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const result = await model.generateContent([
+          GEMINI_PROMPT,
+          {
+            inlineData: {
+              data: base64,
+              mimeType: "video/webm",
+            },
+          },
+        ]);
+        const response = result.response;
+        const markdown = response.text();
 
-    const response = result.response;
-    const markdown = response.text();
+        const response = result.response;
+        const markdown = response.text();
 
-    let severity = "Minor";
-    const severityMatch = markdown.match(/severity[:\s]+(Critical|Major|Minor)/i);
-    if (severityMatch) severity = severityMatch[1];
+        let severity = "Minor";
+        const severityMatch = markdown.match(/severity[:\s]+(Critical|Major|Minor)/i);
+        if (severityMatch) severity = severityMatch[1];
 
-    const videoPublicUrl = supabase!.storage
-      .from("recordings")
-      .getPublicUrl(recording.storage_path).data.publicUrl;
-    const finalMarkdown = `${markdown}\n\n---\n### 📹 Attachment: Screen Recording\n[▶ View Original Recording](${videoPublicUrl})`;
+        const videoPublicUrl = supabase!.storage
+          .from("recordings")
+          .getPublicUrl(recording.storage_path).data.publicUrl;
+        const finalMarkdown = `${markdown}\n\n---\n### 📹 Attachment: Screen Recording\n[▶ View Original Recording](${videoPublicUrl})`;
 
-    const saveRes = await fetch("/api/save-bug-report", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        recordingId: recording.id,
-        title: recording.title || "Untitled Bug Report",
-        raw_markdown: finalMarkdown,
-        severity,
-      }),
-    });
+        const saveRes = await fetch("/api/save-bug-report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            recordingId: recording.id,
+            title: recording.title || "Untitled Bug Report",
+            raw_markdown: finalMarkdown,
+            severity,
+          }),
+        });
 
-    if (!saveRes.ok) {
-      const j = await saveRes.json().catch(() => ({}));
-      throw new Error(j.error || "Failed to save bug report");
+        if (!saveRes.ok) {
+          const j = await saveRes.json().catch(() => ({}));
+          throw new Error(j.error || "Failed to save bug report");
+        }
+        return;
+      } catch (err) {
+        lastError = err;
+        const msg = err instanceof Error ? err.message : String(err);
+        const is429 = msg.includes("429") || msg.includes("quota") || msg.includes("rate");
+        if (is429 && attempt < maxRetries - 1) {
+          const delayMs = 8000;
+          await new Promise((r) => setTimeout(r, delayMs));
+          continue;
+        }
+        if (is429) {
+          throw new Error(
+            "Gemini API rate limit reached. Please wait a minute and try again, or check your quota at https://ai.google.dev/gemini-api/docs/rate-limits"
+          );
+        }
+        throw err;
+      }
     }
+    throw lastError;
   }
 
   function blobToBase64(blob: Blob): Promise<string> {
