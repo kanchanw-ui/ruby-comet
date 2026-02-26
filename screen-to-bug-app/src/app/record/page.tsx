@@ -144,69 +144,28 @@ export default function RecordPage() {
       if (!keyResp.ok) throw new Error("Could not fetch AI key");
       const { key: geminiKey } = await keyResp.json();
 
-      // STEP 4: Upload video to Gemini File API (directly from browser — no server timeout!)
+      // STEP 4: Convert recording to base64 for Gemini
       setUploadStatus("uploading_to_ai");
       setStatusMessage("Sending video to Gemini AI…");
 
-      const videoArrayBuffer = await blob.arrayBuffer();
-      const videoSize = videoArrayBuffer.byteLength;
-
-      // Initiate resumable upload
-      const initResp = await fetch(
-        `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${geminiKey}`,
-        {
-          method: "POST",
-          headers: {
-            "X-Goog-Upload-Protocol": "resumable",
-            "X-Goog-Upload-Command": "start",
-            "X-Goog-Upload-Header-Content-Length": videoSize.toString(),
-            "X-Goog-Upload-Header-Content-Type": "video/webm",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ file: { display_name: `bug-recording-${Date.now()}` } }),
-        }
-      );
-
-      const uploadUri = initResp.headers.get("x-goog-upload-url");
-      if (!uploadUri) throw new Error("Gemini: no upload URI returned");
-
-      // Upload the actual bytes
-      const uploadResp = await fetch(uploadUri, {
-        method: "POST",
-        headers: {
-          "X-Goog-Upload-Command": "upload, finalize",
-          "X-Goog-Upload-Offset": "0",
-          "Content-Type": "video/webm",
-        },
-        body: videoArrayBuffer,
+      // Convert Blob to Base64
+      const base64Video = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (typeof reader.result === "string") {
+            const b64 = reader.result.split(",")[1];
+            resolve(b64);
+          } else {
+            reject(new Error("Failed to read video blob as base64 string"));
+          }
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
       });
 
-      if (!uploadResp.ok) throw new Error(`Gemini upload failed: ${uploadResp.status}`);
-      const uploadedFile = await uploadResp.json();
-      const geminiFileName = uploadedFile.file?.name;
-      let geminiFileUri = uploadedFile.file?.uri;
-      let fileState = uploadedFile.file?.state;
-
-      // STEP 5: Wait for Gemini to process the video file
+      // STEP 5: Ask Gemini to generate the bug report using inlineData
       setUploadStatus("ai_processing");
       setStatusMessage("✨ AI is watching your recording…");
-
-      let waitCount = 0;
-      while (fileState === "PROCESSING" && waitCount < 30) {
-        await new Promise((r) => setTimeout(r, 3000));
-        waitCount++;
-        const checkResp = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/${geminiFileName}?key=${geminiKey}`
-        );
-        const checkData = await checkResp.json();
-        fileState = checkData.state;
-        geminiFileUri = checkData.uri || geminiFileUri;
-      }
-
-      if (fileState !== "ACTIVE") throw new Error(`Gemini file not ready (state: ${fileState})`);
-
-      // STEP 6: Ask Gemini to generate the bug report
-      setStatusMessage("🧠 Generating bug report…");
 
       const genResp = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
@@ -214,7 +173,14 @@ export default function RecordPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: GEMINI_PROMPT }, { fileData: { mimeType: "video/webm", fileUri: geminiFileUri } }] }],
+            contents: [
+              {
+                parts: [
+                  { text: GEMINI_PROMPT },
+                  { inlineData: { mimeType: "video/webm", data: base64Video } },
+                ],
+              },
+            ],
           }),
         }
       );
