@@ -3,8 +3,20 @@
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const isSupabaseConfigured = () => !!supabase;
+
+const GEMINI_PROMPT = `Analyze this screen recording video and generate a structured bug report in markdown format.
+
+Please extract:
+1. **Steps to Reproduce**: An ordered list of the key user interactions shown in the video that lead to the issue.
+2. **Actual Result**: Use a minimal bulleted list to describe what actually happened (error messages, visual glitches, unexpected behavior).
+3. **Expected Result**: Use a minimal bulleted list to describe what should have happened.
+4. **Visual Symptoms**: Any error dialogs, UI glitches, crashes, or other visual indicators of the problem.
+5. **Severity**: Classify as "Critical", "Major", or "Minor" with a brief justification.
+
+Format your response as markdown with clear sections. Keep the Actual and Expected results extremely concise.`;
 
 const MAX_RECORDING_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -13,8 +25,9 @@ export default function RecordPage() {
   const [timeRemaining, setTimeRemaining] = useState(MAX_RECORDING_DURATION_MS);
   const [recordingTitle, setRecordingTitle] = useState("");
   const [uploadStatus, setUploadStatus] = useState<
-    "idle" | "uploading" | "success" | "error"
+    "idle" | "uploading" | "processing" | "success" | "error"
   >("idle");
+  const [processingError, setProcessingError] = useState<string | null>(null);
   const [recordingId, setRecordingId] = useState<string | null>(null);
 
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -152,22 +165,96 @@ export default function RecordPage() {
       }
 
       setRecordingId(recordingData.id);
-      setUploadStatus("success");
+      setUploadStatus("processing");
+      setProcessingError(null);
       setRecordingTitle("");
 
-      // Trigger AI processing
-      fetch("/api/process-recording", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recordingId: recordingData.id }),
-      }).catch((error) => {
-        console.error("Error triggering AI processing:", error);
-      });
+      // Run Gemini in the browser to avoid Vercel serverless timeout
+      try {
+        await processRecordingInBrowser(blob, recordingData);
+        setUploadStatus("success");
+      } catch (err) {
+        console.error("Error generating bug report:", err);
+        setProcessingError(err instanceof Error ? err.message : String(err));
+        setUploadStatus("error");
+      }
     } catch (error) {
       console.error("Error uploading recording:", error);
       setUploadStatus("error");
     }
   };
+
+  /** Run Gemini in the browser so Vercel does not timeout during long video analysis. */
+  async function processRecordingInBrowser(
+    blob: Blob,
+    recording: { id: string; title: string | null; storage_path: string }
+  ) {
+    const keyRes = await fetch("/api/gemini-key");
+    if (!keyRes.ok) {
+      const j = await keyRes.json().catch(() => ({}));
+      throw new Error(j.error || "Failed to get Gemini API key");
+    }
+    const { key } = await keyRes.json();
+    if (!key) throw new Error("Gemini API key not configured");
+
+    const genAI = new GoogleGenerativeAI(key);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    // Use inline base64 in the browser (no File API / Node APIs)
+    const base64 = await blobToBase64(blob);
+
+    const result = await model.generateContent([
+      GEMINI_PROMPT,
+      {
+        inlineData: {
+          data: base64,
+          mimeType: "video/webm",
+        },
+      },
+    ]);
+
+    const response = result.response;
+    const markdown = response.text();
+
+    let severity = "Minor";
+    const severityMatch = markdown.match(/severity[:\s]+(Critical|Major|Minor)/i);
+    if (severityMatch) severity = severityMatch[1];
+
+    const videoPublicUrl = supabase!.storage
+      .from("recordings")
+      .getPublicUrl(recording.storage_path).data.publicUrl;
+    const finalMarkdown = `${markdown}\n\n---\n### 📹 Attachment: Screen Recording\n[▶ View Original Recording](${videoPublicUrl})`;
+
+    const saveRes = await fetch("/api/save-bug-report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recordingId: recording.id,
+        title: recording.title || "Untitled Bug Report",
+        raw_markdown: finalMarkdown,
+        severity,
+      }),
+    });
+
+    if (!saveRes.ok) {
+      const j = await saveRes.json().catch(() => ({}));
+      throw new Error(j.error || "Failed to save bug report");
+    }
+  }
+
+  function blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        const base64 = dataUrl.split(",")[1];
+        if (base64) resolve(base64);
+        else reject(new Error("Failed to read video as base64"));
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black p-8">
@@ -254,6 +341,17 @@ export default function RecordPage() {
             </div>
           )}
 
+          {uploadStatus === "processing" && (
+            <div className="text-center py-8 space-y-2">
+              <p className="text-zinc-600 dark:text-zinc-400 font-medium">
+                Generating bug report...
+              </p>
+              <p className="text-sm text-zinc-500 dark:text-zinc-500">
+                AI is analyzing your video. This may take a minute. Do not close this page.
+              </p>
+            </div>
+          )}
+
           {uploadStatus === "success" && recordingId && (
             <div className="text-center py-8 space-y-4">
               <p className="text-green-600 dark:text-green-500 font-medium">
@@ -282,12 +380,13 @@ export default function RecordPage() {
           {uploadStatus === "error" && (
             <div className="text-center py-8 space-y-4">
               <p className="text-red-600 dark:text-red-500 font-medium">
-                Error uploading recording. Please try again.
+                {processingError || "Error uploading recording. Please try again."}
               </p>
               <button
                 onClick={() => {
                   setUploadStatus("idle");
                   setRecordingId(null);
+                  setProcessingError(null);
                 }}
                 className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors"
               >
