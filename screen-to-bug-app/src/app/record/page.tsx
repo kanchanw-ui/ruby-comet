@@ -198,7 +198,7 @@ export default function RecordPage() {
     if (!key) throw new Error("Gemini API key not configured");
 
     const genAI = new GoogleGenerativeAI(key);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     // Use inline base64 in the browser (no File API / Node APIs)
     const base64 = await blobToBase64(blob);
