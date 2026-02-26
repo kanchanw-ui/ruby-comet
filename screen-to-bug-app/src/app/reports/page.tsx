@@ -14,6 +14,11 @@ interface BugReport {
   };
 }
 
+/** Supabase can return recording as object or array depending on relation; we normalize to object. */
+type BugReportRow = Omit<BugReport, "recording"> & {
+  recording: { status: string } | { status: string }[];
+};
+
 export default function ReportsPage() {
   const [reports, setReports] = useState<BugReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,13 +47,17 @@ export default function ReportsPage() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      const normalized = (data || []).map((row) => ({
-        ...row,
+      const rows: BugReportRow[] = data ?? [];
+      const normalized: BugReport[] = rows.map((row) => ({
+        id: row.id,
+        title: row.title,
+        severity: row.severity,
+        created_at: row.created_at,
         recording: Array.isArray(row.recording)
           ? row.recording[0] ?? { status: "unknown" }
           : row.recording ?? { status: "unknown" },
       }));
-      setReports(normalized as BugReport[]);
+      setReports(normalized);
     } catch (error) {
       console.error("Error loading reports:", error);
     } finally {
