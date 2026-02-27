@@ -11,11 +11,10 @@ function parseSeverityFromMarkdown(raw: string): string {
   return match ? match[1] : "";
 }
 
-/** Convert markdown to plain text with numbered bullets (one number per line/block). */
-function markdownToNumberedPlainText(md: string): string {
+/** Convert markdown to plain text (strip formatting, no bullets or numbers). */
+function markdownToPlainText(md: string): string {
   const lines = md.split(/\r?\n/);
   const result: string[] = [];
-  let n = 0;
   for (const line of lines) {
     const t = line
       .replace(/^#+\s*/, "")
@@ -24,8 +23,7 @@ function markdownToNumberedPlainText(md: string): string {
       .replace(/^\s*\d+\.\s*/, "")
       .trim();
     if (t.length > 0) {
-      n += 1;
-      result.push(`${n}. ${t}`);
+      result.push(t);
     }
   }
   return result.length ? result.join("\n") : md;
@@ -263,7 +261,7 @@ ${editedMarkdown}
                 />
               ) : (
                 <div className="w-full px-4 py-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-zinc-50 dark:bg-zinc-800/50 text-black dark:text-zinc-50 text-sm whitespace-pre-wrap min-h-[20rem]">
-                  {markdownToNumberedPlainText(editedMarkdown)}
+                  {markdownToPlainText(editedMarkdown)}
                 </div>
               )}
             </div>
