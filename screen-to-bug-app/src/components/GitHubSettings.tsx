@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Settings, X, Save, ShieldCheck, AlertCircle, ExternalLink, Github } from "lucide-react";
+import { X, Save, ShieldCheck, AlertCircle, ExternalLink, Github } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
 export default function GitHubSettings() {
     const [isOpen, setIsOpen] = useState(false);
+    const [mounted, setMounted] = useState(false);
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
@@ -15,6 +17,8 @@ export default function GitHubSettings() {
         repo: "",
         pat: "",
     });
+
+    useEffect(() => setMounted(true), []);
 
     useEffect(() => {
         if (isOpen) {
@@ -104,23 +108,26 @@ export default function GitHubSettings() {
                 GitHub Settings
             </button>
 
-            <AnimatePresence>
-                {isOpen && (
-                    <div
-                        className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-                        onClick={() => setIsOpen(false)}
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="github-settings-title"
-                    >
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="relative z-[101] w-full max-w-md max-h-[90vh] overflow-y-auto bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl"
+            {mounted && createPortal(
+                <AnimatePresence>
+                    {isOpen && (
+                        <div
+                            className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+                            style={{ zIndex: 99999 }}
+                            onClick={() => setIsOpen(false)}
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="github-settings-title"
                         >
-                            <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50 sticky top-0 z-10">
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl border border-slate-600 bg-slate-900 pointer-events-auto"
+                                style={{ zIndex: 100000 }}
+                            >
+                            <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900 sticky top-0 z-[1]">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-slate-500/10 rounded-lg border border-slate-500/20">
                                         <Github size={20} className="text-white" />
@@ -242,7 +249,9 @@ export default function GitHubSettings() {
                         </motion.div>
                     </div>
                 )}
-            </AnimatePresence>
+            </AnimatePresence>,
+            document.body
+            )}
         </>
     );
 }
