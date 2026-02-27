@@ -11,22 +11,61 @@ function parseSeverityFromMarkdown(raw: string): string {
   return match ? match[1] : "";
 }
 
-/** Convert markdown to plain text (strip formatting, no bullets or numbers). */
-function markdownToPlainText(md: string): string {
+/** Convert markdown to preview: section-wise, no ## or **, numbered list only for Steps to Reproduce, bullets for others. */
+function markdownToPreviewText(md: string): string {
   const lines = md.split(/\r?\n/);
   const result: string[] = [];
+  let currentSection: "steps" | "other" | null = null;
+  let stepNumber = 0;
+
+  const SECTION_NAMES = /^(Steps to Reproduce|Actual Result|Expected Result|Visual Symptoms|Severity|Attachment|📹)/i;
+  const stripBold = (s: string) => s.replace(/\*\*(.+?)\*\*/g, "$1").trim();
+  const isSectionHeader = (line: string): boolean => {
+    const t = line.trim();
+    if (/^#+\s+/.test(t)) return true;
+    if (/^\*\*[^*]+\*\*:?\s*$/.test(t)) return true;
+    if (/^\d+\.\s*\*\*[^*]+\*\*/.test(t)) return true;
+    if (SECTION_NAMES.test(stripBold(t)) && t.length < 60) return true;
+    return false;
+  };
+  const getSectionTitle = (line: string): string => {
+    return stripBold(line.replace(/^#+\s*/, "").replace(/^\d+\.\s*/, "").trim()).replace(/:+\s*$/, "");
+  };
+  const isStepsSection = (title: string): boolean => /steps\s+to\s+reproduce/i.test(title);
+  const isListLine = (line: string): boolean => /^\s*[-*]\s+/.test(line) || /^\s*\d+\.\s+\S/.test(line);
+
   for (const line of lines) {
-    const t = line
-      .replace(/^#+\s*/, "")
-      .replace(/\*\*(.+?)\*\*/g, "$1")
-      .replace(/^\s*[-*]\s+/, "")
-      .replace(/^\s*\d+\.\s*/, "")
-      .trim();
-    if (t.length > 0) {
-      result.push(t);
+    const trimmed = line.trim();
+    if (!trimmed) {
+      if (result.length && result[result.length - 1] !== "") result.push("");
+      continue;
     }
+
+    if (isSectionHeader(trimmed)) {
+      const title = getSectionTitle(trimmed);
+      currentSection = isStepsSection(title) ? "steps" : "other";
+      stepNumber = 0;
+      result.push(title);
+      result.push("");
+      continue;
+    }
+
+    if (isListLine(trimmed)) {
+      const content = stripBold(trimmed.replace(/^\s*[-*]\s+/, "").replace(/^\s*\d+\.\s*/, ""));
+      if (!content) continue;
+      if (currentSection === "steps") {
+        stepNumber++;
+        result.push(`${stepNumber}. ${content}`);
+      } else {
+        result.push(`• ${content}`);
+      }
+      continue;
+    }
+
+    result.push(stripBold(trimmed));
   }
-  return result.length ? result.join("\n") : md;
+
+  return result.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 interface BugReport {
@@ -261,7 +300,7 @@ ${editedMarkdown}
                 />
               ) : (
                 <div className="w-full px-4 py-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-zinc-50 dark:bg-zinc-800/50 text-black dark:text-zinc-50 text-sm whitespace-pre-wrap min-h-[20rem]">
-                  {markdownToPlainText(editedMarkdown)}
+                  {markdownToPreviewText(editedMarkdown)}
                 </div>
               )}
             </div>
