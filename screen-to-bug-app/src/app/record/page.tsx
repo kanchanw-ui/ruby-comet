@@ -198,70 +198,75 @@ export default function RecordPage() {
     if (!key) throw new Error("Gemini API key not configured");
 
     const genAI = new GoogleGenerativeAI(key);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
     const base64 = await blobToBase64(blob);
 
-    const maxRetries = 3;
+    const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-flash-lite"] as const;
+    const maxRetriesPerModel = 2;
     let lastError: unknown;
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        const result = await model.generateContent([
-          GEMINI_PROMPT,
-          {
-            inlineData: {
-              data: base64,
-              mimeType: "video/webm",
+
+    for (const modelId of modelsToTry) {
+      const model = genAI.getGenerativeModel({ model: modelId });
+      for (let attempt = 0; attempt < maxRetriesPerModel; attempt++) {
+        try {
+          const result = await model.generateContent([
+            GEMINI_PROMPT,
+            {
+              inlineData: {
+                data: base64,
+                mimeType: "video/webm",
+              },
             },
-          },
-        ]);
-        const response = result.response;
-        const markdown = response.text();
+          ]);
+          const response = result.response;
+          const markdown = response.text();
 
-        const response = result.response;
-        const markdown = response.text();
+          let severity = "Minor";
+          const severityMatch = markdown.match(/severity[:\s]+(Critical|Major|Minor)/i);
+          if (severityMatch) severity = severityMatch[1];
 
-        let severity = "Minor";
-        const severityMatch = markdown.match(/severity[:\s]+(Critical|Major|Minor)/i);
-        if (severityMatch) severity = severityMatch[1];
+          const videoPublicUrl = supabase!.storage
+            .from("recordings")
+            .getPublicUrl(recording.storage_path).data.publicUrl;
+          const finalMarkdown = `${markdown}\n\n---\n### 📹 Attachment: Screen Recording\n[▶ View Original Recording](${videoPublicUrl})`;
 
-        const videoPublicUrl = supabase!.storage
-          .from("recordings")
-          .getPublicUrl(recording.storage_path).data.publicUrl;
-        const finalMarkdown = `${markdown}\n\n---\n### 📹 Attachment: Screen Recording\n[▶ View Original Recording](${videoPublicUrl})`;
+          const saveRes = await fetch("/api/save-bug-report", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              recordingId: recording.id,
+              title: recording.title || "Untitled Bug Report",
+              raw_markdown: finalMarkdown,
+              severity,
+            }),
+          });
 
-        const saveRes = await fetch("/api/save-bug-report", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            recordingId: recording.id,
-            title: recording.title || "Untitled Bug Report",
-            raw_markdown: finalMarkdown,
-            severity,
-          }),
-        });
-
-        if (!saveRes.ok) {
-          const j = await saveRes.json().catch(() => ({}));
-          throw new Error(j.error || "Failed to save bug report");
-        }
-        return;
+          if (!saveRes.ok) {
+            const j = await saveRes.json().catch(() => ({}));
+            throw new Error(j.error || "Failed to save bug report");
+          }
+          return;
       } catch (err) {
         lastError = err;
         const msg = err instanceof Error ? err.message : String(err);
         const is429 = msg.includes("429") || msg.includes("quota") || msg.includes("rate");
-        if (is429 && attempt < maxRetries - 1) {
-          const delayMs = 8000;
-          await new Promise((r) => setTimeout(r, delayMs));
-          continue;
-        }
         if (is429) {
-          throw new Error(
-            "Gemini API rate limit reached. Please wait a minute and try again, or check your quota at https://ai.google.dev/gemini-api/docs/rate-limits"
-          );
+          const retryMatch = msg.match(/retry in (\d+(?:\.\d+)?)\s*s/i);
+          const delaySec = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : 35;
+          const delayMs = Math.min(delaySec * 1000, 60000);
+          if (attempt < maxRetriesPerModel - 1) {
+            await new Promise((r) => setTimeout(r, delayMs));
+            continue;
+          }
+          if (modelId === modelsToTry[modelsToTry.length - 1]) {
+            throw new Error(
+              "Gemini API quota exceeded. Please wait a few minutes and try again, or check your quota at https://ai.google.dev/gemini-api/docs/rate-limits"
+            );
+          }
+          break;
         }
         throw err;
       }
+    }
     }
     throw lastError;
   }

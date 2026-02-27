@@ -12,11 +12,11 @@
 - [x] 2.4 Implement logic to manually stop recording and finalize the `.webm` blob
 - [x] 2.5 Upload finalized recording to Supabase Storage and create or update a `recordings` row with metadata and status
 
-## 3. AI Processing Pipeline (Gemini 1.5 Flash)
+## 3. AI Processing Pipeline (Gemini 2.5 Flash)
 
 - [x] 3.1 Implement serverless API route (e.g., `POST /api/process-recording`) that accepts a `recordingId`
 - [x] 3.2 Fetch the corresponding `.webm` from Supabase Storage on the server using Supabase SDK or signed URL
-- [x] 3.3 Call Gemini 1.5 Flash with the video input and a structured prompt to extract steps, visual symptoms, and severity
+- [x] 3.3 Call Gemini 2.5 Flash with the video input and a structured prompt to extract steps, visual symptoms, and severity
 - [x] 3.4 Map Gemini response into a markdown bug report structure and severity classification
 - [x] 3.5 Create a `bug_reports` row linked to the `recordings` row with AI-generated `raw_markdown` and severity
 - [x] 3.6 Update `recordings.status` as AI processing progresses (`pending_ai` → `ai_complete` → `report_finalized`)

@@ -9,7 +9,7 @@ The current process of turning screen recordings into actionable bug reports is 
   - Automatically limit recordings to a maximum duration of 5 minutes.
   - Upload captured recordings to persistent storage.
 - Add an AI-powered processing pipeline that:
-  - Sends stored screen recordings to Gemini 1.5 Flash for native video reasoning.
+  - Sends stored screen recordings to Gemini 2.5 Flash for native video reasoning.
   - Extracts structured bug-report fields from the video (steps to reproduce, observed behavior, error visuals, severity).
 - Provide a reporting experience that:
   - Displays the AI-generated bug report in a readable markdown format.
@@ -39,7 +39,7 @@ The current process of turning screen recordings into actionable bug reports is 
   - Supabase project required for Postgres database and S3-compatible object storage for `.webm` recordings.
   - New serverless API routes (e.g., Vercel functions) to:
     - Accept recording metadata and trigger AI processing.
-    - Call the Gemini 1.5 Flash video API using `GOOGLE_GENERATIVE_AI_API_KEY`.
+    - Call the Gemini 2.5 Flash video API using `GOOGLE_GENERATIVE_AI_API_KEY`.
     - Persist finalized bug reports to Supabase Postgres.
 - AI:
   - Prompt design tailored to extract steps to reproduce, visual symptoms, and severity from video-only input (no audio).

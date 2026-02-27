@@ -41,7 +41,7 @@ export default function Home() {
       {/* Hero Section */}
       <main className="relative z-10 max-w-7xl mx-auto px-6 pt-24 pb-32 text-center">
         <div className="inline-block px-4 py-1.5 mb-6 rounded-full border border-zinc-800 bg-zinc-900/50 backdrop-blur-md text-sm font-medium text-blue-400">
-          ✨ Powered by Gemini 1.5 Flash
+          ✨ Powered by Gemini 2.5 Flash
         </div>
         <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-8 bg-clip-text text-transparent bg-gradient-to-b from-white to-zinc-500">
           Manual Testing,<br />Automated Documentation.

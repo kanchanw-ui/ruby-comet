@@ -15,7 +15,7 @@ An AI-powered diagnostic tool that converts screen recordings into structured bu
 | :--- | :--- |
 | **Frontend/App** | **Next.js** (App Router) on **Vercel** |
 | **Backend/Storage** | **Supabase** (Database + S3-compatible Storage) |
-| **AI Intelligence** | **Gemini 1.5 Flash** (Native video reasoning) |
+| **AI Intelligence** | **Gemini 2.5 Flash** (Native video reasoning) |
 | **Capture Engine** | **MediaRecorder API** (Standard Web APIs) |
 
 ## 4. 4-Day Development Roadmap
@@ -26,7 +26,7 @@ An AI-powered diagnostic tool that converts screen recordings into structured bu
 *   **Storage**: Direct upload of `.webm` chunks to **Supabase Storage**.
 
 ### Day 2: The AI Core (Visual Reasoning)
-*   **AI Integration**: Create a Vercel Server Function to call the Gemini 1.5 Flash API.
+*   **AI Integration**: Create a Vercel Server Function to call the Gemini 2.5 Flash API.
 *   **Prompts**: Optimize the prompt to extract:
     *   Sequence of UI interactions (clicks, inputs).
     *   Visual symptoms (error messages, crashes).

@@ -137,15 +137,59 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    // Call Gemini 1.5 Flash
-    console.log("Calling Gemini API...");
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    // Call Gemini 2.5 Flash with retry and fallback to 2.5 Flash-Lite on 429
+    const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-flash-lite"] as const;
+    const maxRetriesPerModel = 2;
+    let markdown: string | null = null;
+    let lastError: unknown;
 
-    const result = await model.generateContent([PROMPT, videoPart]);
+    for (const modelId of modelsToTry) {
+      const model = genAI.getGenerativeModel({ model: modelId });
+      for (let attempt = 0; attempt < maxRetriesPerModel; attempt++) {
+        try {
+          console.log("Calling Gemini API...", modelId, attempt + 1);
+          const result = await model.generateContent([PROMPT, videoPart]);
+          const response = await result.response;
+          markdown = response.text();
+          console.log("Gemini response received. Markdown length:", markdown.length);
+          break;
+        } catch (err) {
+          lastError = err;
+          const msg = err instanceof Error ? err.message : String(err);
+          const is429 = msg.includes("429") || msg.includes("quota") || msg.includes("rate");
+          if (is429) {
+            const retryMatch = msg.match(/retry in (\d+(?:\.\d+)?)\s*s/i);
+            const delaySec = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : 35;
+            const delayMs = Math.min(delaySec * 1000, 60000);
+            if (attempt < maxRetriesPerModel - 1) {
+              console.log(`Quota/rate limit hit. Waiting ${delaySec}s before retry...`);
+              await new Promise((r) => setTimeout(r, delayMs));
+              continue;
+            }
+            if (modelId === modelsToTry[modelsToTry.length - 1]) {
+              return NextResponse.json(
+                {
+                  error: "Gemini API quota exceeded. Please wait a few minutes and try again.",
+                  details: "https://ai.google.dev/gemini-api/docs/rate-limits",
+                },
+                { status: 429 }
+              );
+            }
+            break;
+          }
+          throw err;
+        }
+      }
+      if (markdown) break;
+    }
 
-    const response = await result.response;
-    const markdown = response.text();
-    console.log("Gemini response received. Markdown length:", markdown.length);
+    if (!markdown) {
+      console.error("All Gemini attempts failed:", lastError);
+      return NextResponse.json(
+        { error: "AI processing failed", details: String(lastError) },
+        { status: 500 }
+      );
+    }
 
     // Extract severity
     let severity = "Minor";

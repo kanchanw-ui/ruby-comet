@@ -1,13 +1,13 @@
 ## Context
 
-The goal is to build a single-user prototype that turns short screen recordings into structured bug reports using Gemini 1.5 Flash, within a four-day development window. The system should support screen capture in the browser, storage of recordings, AI processing of videos, and a simple workflow to review, edit, and export the resulting bug reports. The stack is constrained to Next.js (App Router) deployed on Vercel, Supabase for database and storage, and Gemini 1.5 Flash for video reasoning, with recordings limited to a maximum of five minutes and no audio analysis.
+The goal is to build a single-user prototype that turns short screen recordings into structured bug reports using Gemini 2.5 Flash, within a four-day development window. The system should support screen capture in the browser, storage of recordings, AI processing of videos, and a simple workflow to review, edit, and export the resulting bug reports. The stack is constrained to Next.js (App Router) deployed on Vercel, Supabase for database and storage, and Gemini 2.5 Flash for video reasoning, with recordings limited to a maximum of five minutes and no audio analysis.
 
 ## Goals / Non-Goals
 
 **Goals:**
 - Provide a smooth browser-based flow to start and stop screen recordings and enforce a five-minute maximum duration.
 - Persist recordings in Supabase Storage with enough metadata to later associate them with bug reports.
-- Call Gemini 1.5 Flash with video input to extract structured bug-report fields: steps to reproduce, visual symptoms, and severity.
+- Call Gemini 2.5 Flash with video input to extract structured bug-report fields: steps to reproduce, visual symptoms, and severity.
 - Render an editable markdown bug report in a dashboard where the user can tweak details and save the final version to Supabase Postgres.
 - Enable one-click copying of the finalized report into a format suitable for Jira or GitHub issues.
 - Optimize for a single-user, non-scaled prototype that can be implemented by one developer in four days.
@@ -42,11 +42,11 @@ The goal is to build a single-user prototype that turns short screen recordings 
   - Optional `title` or short description supplied by the user.
 - Rationale: Separating binary storage (Supabase Storage) from metadata (Postgres) keeps queries fast and aligns with Supabase best practices.
 
-**AI processing flow (Gemini 1.5 Flash)**
+**AI processing flow (Gemini 2.5 Flash)**
 - Introduce a serverless route (e.g., `POST /api/process-recording`) that:
   - Accepts a `recordingId`.
   - Fetches the corresponding `.webm` from Supabase Storage (via server-side Supabase client or a signed URL).
-  - Streams or uploads the video to the Gemini 1.5 Flash API using `GOOGLE_GENERATIVE_AI_API_KEY`.
+  - Streams or uploads the video to the Gemini 2.5 Flash API using `GOOGLE_GENERATIVE_AI_API_KEY`.
   - Uses a strongly structured prompt that asks Gemini to return:
     - Ordered steps to reproduce.
     - Observed behavior and visual symptoms.
