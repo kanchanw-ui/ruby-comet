@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Call Gemini 2.5 Flash with retry and fallback to 2.5 Flash-Lite on 429
-    const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-flash-lite"] as const;
+    const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3-flash-preview"] as const;
     const maxRetriesPerModel = 2;
     let markdown: string | null = null;
     let lastError: unknown;

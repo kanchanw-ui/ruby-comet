@@ -1,9 +1,35 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
+
+/** Parse severity from report content (e.g. "Severity: Major" or "**Severity:** Critical"). */
+function parseSeverityFromMarkdown(raw: string): string {
+  const match = raw.match(/Severity[:\s*]+(Critical|Major|Minor)/i);
+  return match ? match[1] : "";
+}
+
+/** Convert markdown to plain text with numbered bullets (one number per line/block). */
+function markdownToNumberedPlainText(md: string): string {
+  const lines = md.split(/\r?\n/);
+  const result: string[] = [];
+  let n = 0;
+  for (const line of lines) {
+    const t = line
+      .replace(/^#+\s*/, "")
+      .replace(/\*\*(.+?)\*\*/g, "$1")
+      .replace(/^\s*[-*]\s+/, "")
+      .replace(/^\s*\d+\.\s*/, "")
+      .trim();
+    if (t.length > 0) {
+      n += 1;
+      result.push(`${n}. ${t}`);
+    }
+  }
+  return result.length ? result.join("\n") : md;
+}
 
 interface BugReport {
   id: string;
@@ -14,18 +40,22 @@ interface BugReport {
   updated_at: string;
 }
 
+type ReportViewMode = "markdown" | "preview";
+
 export default function ReportDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const reportId = params.id as string;
 
   const [report, setReport] = useState<BugReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushSuccess, setPushSuccess] = useState<string | null>(null);
+  const [pushError, setPushError] = useState<string | null>(null);
   const [editedTitle, setEditedTitle] = useState("");
   const [editedSeverity, setEditedSeverity] = useState("");
   const [editedMarkdown, setEditedMarkdown] = useState("");
-  const [copySuccess, setCopySuccess] = useState(false);
+  const [viewMode, setViewMode] = useState<ReportViewMode>("markdown");
 
   useEffect(() => {
     if (reportId) {
@@ -49,13 +79,34 @@ export default function ReportDetailPage() {
       if (data) {
         setReport(data);
         setEditedTitle(data.title || "");
-        setEditedSeverity(data.severity || "");
+        const contentSeverity = parseSeverityFromMarkdown(data.raw_markdown || "");
+        setEditedSeverity(contentSeverity || data.severity || "");
         setEditedMarkdown(data.raw_markdown || "");
       }
     } catch (error) {
       console.error("Error loading report:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePushToGithub = async () => {
+    setPushError(null);
+    setPushSuccess(null);
+    setPushLoading(true);
+    try {
+      const res = await fetch("/api/github/create-issue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reportId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to push to GitHub");
+      setPushSuccess(json.url || (json.issueNumber ? `Issue #${json.issueNumber} created` : "Done"));
+    } catch (e) {
+      setPushError(e instanceof Error ? e.message : "Failed to push to GitHub");
+    } finally {
+      setPushLoading(false);
     }
   };
 
@@ -93,10 +144,7 @@ ${editedMarkdown}
 ---
 *Generated from screen recording*`;
 
-    navigator.clipboard.writeText(exportMarkdown).then(() => {
-      setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000);
-    });
+    navigator.clipboard.writeText(exportMarkdown).then(() => {});
   };
 
   if (loading) {
@@ -176,23 +224,52 @@ ${editedMarkdown}
             </div>
 
             <div>
-              <label
-                htmlFor="markdown"
-                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2"
-              >
-                Report Content (Markdown)
-              </label>
-              <textarea
-                id="markdown"
-                value={editedMarkdown}
-                onChange={(e) => setEditedMarkdown(e.target.value)}
-                rows={20}
-                className="w-full px-4 py-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800 text-black dark:text-zinc-50 font-mono text-sm"
-              />
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Report Content
+                </label>
+                <div className="flex rounded-lg border border-zinc-300 dark:border-zinc-700 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("markdown")}
+                    className={`px-4 py-2 text-sm font-medium transition-colors ${
+                      viewMode === "markdown"
+                        ? "bg-blue-600 text-white"
+                        : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    Markdown
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("preview")}
+                    className={`px-4 py-2 text-sm font-medium transition-colors ${
+                      viewMode === "preview"
+                        ? "bg-blue-600 text-white"
+                        : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    Preview
+                  </button>
+                </div>
+              </div>
+              {viewMode === "markdown" ? (
+                <textarea
+                  id="markdown"
+                  value={editedMarkdown}
+                  onChange={(e) => setEditedMarkdown(e.target.value)}
+                  rows={20}
+                  className="w-full px-4 py-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800 text-black dark:text-zinc-50 font-mono text-sm"
+                />
+              ) : (
+                <div className="w-full px-4 py-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-zinc-50 dark:bg-zinc-800/50 text-black dark:text-zinc-50 text-sm whitespace-pre-wrap min-h-[20rem]">
+                  {markdownToNumberedPlainText(editedMarkdown)}
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="flex items-center gap-4 pt-4 border-t border-zinc-200 dark:border-zinc-700">
+          <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-zinc-200 dark:border-zinc-700">
             <button
               onClick={handleSave}
               disabled={saving}
@@ -201,11 +278,25 @@ ${editedMarkdown}
               {saving ? "Saving..." : "Save Changes"}
             </button>
             <button
-              onClick={handleCopyToClipboard}
-              className="px-6 py-2 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 font-medium rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+              onClick={handlePushToGithub}
+              disabled={pushLoading}
+              className="px-6 py-2 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 font-medium rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
             >
-              {copySuccess ? "✓ Copied!" : "Copy to Jira/GitHub"}
+              {pushLoading ? "Pushing..." : pushSuccess ? "✓ Pushed!" : "Push to Github"}
             </button>
+            {pushSuccess && (
+              <a
+                href={pushSuccess.startsWith("http") ? pushSuccess : "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                {pushSuccess.startsWith("http") ? "View issue →" : pushSuccess}
+              </a>
+            )}
+            {pushError && (
+              <span className="text-sm text-red-600 dark:text-red-400">{pushError}</span>
+            )}
             <div className="flex-1 text-right text-sm text-zinc-600 dark:text-zinc-400">
               Created: {new Date(report.created_at).toLocaleString()}
               {report.updated_at !== report.created_at && (

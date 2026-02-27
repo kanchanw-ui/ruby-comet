@@ -96,8 +96,9 @@ export default function GitHubSettings() {
     return (
         <>
             <button
+                type="button"
                 onClick={() => setIsOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700 rounded-lg transition-all text-sm font-medium"
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700 rounded-lg transition-all text-sm font-medium cursor-pointer"
             >
                 <Github size={16} />
                 GitHub Settings
@@ -105,26 +106,35 @@ export default function GitHubSettings() {
 
             <AnimatePresence>
                 {isOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div
+                        className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+                        onClick={() => setIsOpen(false)}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="github-settings-title"
+                    >
                         <motion.div
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden"
+                            onClick={(e) => e.stopPropagation()}
+                            className="relative z-[101] w-full max-w-md max-h-[90vh] overflow-y-auto bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl"
                         >
-                            <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                            <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50 sticky top-0 z-10">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-slate-500/10 rounded-lg border border-slate-500/20">
                                         <Github size={20} className="text-white" />
                                     </div>
                                     <div>
-                                        <h2 className="text-lg font-semibold text-white">GitHub Configuration</h2>
+                                        <h2 id="github-settings-title" className="text-lg font-semibold text-white">GitHub Configuration</h2>
                                         <p className="text-xs text-slate-400">Export bug reports to GitHub Issues</p>
                                     </div>
                                 </div>
                                 <button
+                                    type="button"
                                     onClick={() => setIsOpen(false)}
-                                    className="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400"
+                                    className="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400 cursor-pointer"
+                                    aria-label="Close"
                                 >
                                     <X size={20} />
                                 </button>
@@ -133,8 +143,9 @@ export default function GitHubSettings() {
                             <form onSubmit={handleSave} className="p-6 space-y-4">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
-                                        <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Owner</label>
+                                        <label htmlFor="github-owner" className="text-xs font-medium text-slate-400 uppercase tracking-wider">Owner</label>
                                         <input
+                                            id="github-owner"
                                             type="text"
                                             required
                                             placeholder="username"
@@ -144,8 +155,9 @@ export default function GitHubSettings() {
                                         />
                                     </div>
                                     <div className="space-y-1.5">
-                                        <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Repo</label>
+                                        <label htmlFor="github-repo" className="text-xs font-medium text-slate-400 uppercase tracking-wider">Repo</label>
                                         <input
+                                            id="github-repo"
                                             type="text"
                                             required
                                             placeholder="repo-name"
@@ -158,16 +170,18 @@ export default function GitHubSettings() {
 
                                 <div className="space-y-1.5">
                                     <div className="flex justify-between items-center">
-                                        <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Access Token (PAT)</label>
+                                        <label htmlFor="github-pat" className="text-xs font-medium text-slate-400 uppercase tracking-wider">Access Token (PAT)</label>
                                         <a
                                             href="https://github.com/settings/tokens"
                                             target="_blank"
-                                            className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors"
+                                            rel="noopener noreferrer"
+                                            className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors cursor-pointer"
                                         >
                                             Create PAT <ExternalLink size={10} />
                                         </a>
                                     </div>
                                     <input
+                                        id="github-pat"
                                         type="password"
                                         required
                                         placeholder="ghp_..."
@@ -200,7 +214,7 @@ export default function GitHubSettings() {
                                             type="button"
                                             onClick={handleTestConnection}
                                             disabled={testing || !config.owner || !config.repo || !config.pat}
-                                            className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl border border-slate-700 flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                                            className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl border border-slate-700 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer"
                                         >
                                             {testing ? (
                                                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -211,7 +225,7 @@ export default function GitHubSettings() {
                                         <button
                                             type="submit"
                                             disabled={loading}
-                                            className="bg-slate-200 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed text-slate-900 font-semibold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                                            className="bg-slate-200 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed text-slate-900 font-semibold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer"
                                         >
                                             {loading ? (
                                                 <div className="w-5 h-5 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin" />

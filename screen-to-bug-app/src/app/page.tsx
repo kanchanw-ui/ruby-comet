@@ -1,6 +1,4 @@
 import Link from "next/link";
-import JiraSettings from "@/components/JiraSettings";
-import AzureDevOpsSettings from "@/components/AzureDevOpsSettings";
 import GitHubSettings from "@/components/GitHubSettings";
 
 export default function Home() {
@@ -21,20 +19,7 @@ export default function Home() {
           <span className="font-semibold text-xl tracking-tight">Screen-to-Bug</span>
         </div>
         <div className="flex items-center gap-6">
-          <Link href="/reports" className="text-zinc-400 hover:text-white transition-colors text-sm font-medium">
-            Reports
-          </Link>
-          <div className="flex items-center gap-3">
-            <JiraSettings />
-            <AzureDevOpsSettings />
-            <GitHubSettings />
-          </div>
-          <Link
-            href="/record"
-            className="px-5 py-2 bg-white text-black font-medium rounded-full hover:bg-zinc-200 transition-all active:scale-95 text-sm"
-          >
-            Get Started
-          </Link>
+          <GitHubSettings />
         </div>
       </nav>
 
@@ -44,10 +29,10 @@ export default function Home() {
           ✨ Powered by Gemini 2.5 Flash
         </div>
         <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-8 bg-clip-text text-transparent bg-gradient-to-b from-white to-zinc-500">
-          Manual Testing,<br />Automated Documentation.
+          Record. Review. Report.
         </h1>
         <p className="text-lg md:text-xl text-zinc-400 max-w-2xl mx-auto mb-12 leading-relaxed">
-          Record a 10-second video of any bug. Our AI watches it, identifies the steps,
+          Record a short video of any bug (up to 5 minutes). Our AI watches it, identifies the steps,
           and generates a professional bug report in seconds.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
