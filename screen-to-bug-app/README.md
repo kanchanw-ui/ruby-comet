@@ -7,6 +7,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 1. Create a new Supabase project.
 2. Create a storage bucket named `recordings` for uploaded `.webm` screen recordings.
 3. Run the SQL in `supabase/schema.sql` against your Supabase database to create the `recordings` and `bug_reports` tables.
+4. If you have an existing database, run `supabase/migrations/20260227000000_add_playwright_script.sql` to add the `playwright_script` column to `bug_reports` (for the Playwright regression feature).
 
 ### 2. Environment variables
 
@@ -15,6 +16,7 @@ Configure the following environment variables (e.g., in a `.env.local` file loca
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key   # required for API routes (Generate Playwright, Push to GitHub)
 GOOGLE_GENERATIVE_AI_API_KEY=your-gemini-api-key
 ```
 
@@ -26,6 +28,10 @@ npm run dev
 ```
 
 Then open [http://localhost:3000](http://localhost:3000) with your browser.
+
+## Playwright regression scripts (feature branch)
+
+On the branch `feature/playwright-from-recording`, each bug report can have a **Playwright test** generated from its "Steps to Reproduce". Open a report, scroll to **Playwright test (regression)**, and click **Generate Playwright script**. The AI produces a TypeScript test you can copy and run with `npx playwright test` for regression testing.
 
 ## Learn More
 

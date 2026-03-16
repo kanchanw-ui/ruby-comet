@@ -21,6 +21,7 @@ create table if not exists public.bug_reports (
   title text,
   raw_markdown text not null,
   severity text,
+  playwright_script text, -- Playwright test script for regression (generated from steps)
   jira_issue_key text, -- Jira task tracking
   ado_work_item_id text, -- ADO task tracking
   github_issue_number integer, -- GitHub Issue Number

@@ -7,16 +7,27 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const isSupabaseConfigured = () => !!supabase;
 
-const GEMINI_PROMPT = `Analyze this screen recording video and generate a structured bug report in markdown format.
+const GEMINI_PROMPT = `You are analyzing a screen recording with optional voice narration to produce a single, coherent bug report. Combine what you SEE (user actions on screen) with what you HEAR (user's speech) into one structured report.
 
-Please extract:
-1. **Steps to Reproduce**: An ordered list of the key user interactions shown in the video that lead to the issue.
-2. **Actual Result**: Use a minimal bulleted list to describe what actually happened (error messages, visual glitches, unexpected behavior).
-3. **Expected Result**: Use a minimal bulleted list to describe what should have happened.
-4. **Visual Symptoms**: Any error dialogs, UI glitches, crashes, or other visual indicators of the problem.
-5. **Severity**: Classify as "Critical", "Major", or "Minor" with a brief justification.
+**Title**
+- First line: **Title:** followed by one short sentence summarizing the bug (e.g. "Login fails with invalid credentials error"). This is required.
 
-Format your response as markdown with clear sections. Keep the Actual and Expected results extremely concise.`;
+**Steps to Reproduce**
+- Build an ordered list that merges (1) visible user actions (clicks, navigation, inputs) and (2) brief spoken context where relevant. Keep each step to one short line. Aim for 5-7 steps maximum; do not repeat the same idea. Prefer "Click X" or "Navigate to Y" plus a brief phrase; avoid long sentences or paragraphs. Fold speech into steps only when it clarifies the action in a few words.
+
+**Expected Result**
+- Use the user's speech to infer what they expect. When they say "this should be expected", "it should show X", "expected to see Y" — put that here as 1-3 bullet points. If not stated, one brief line.
+
+**Actual Result**
+- Use the user's speech for what is wrong. When they say "this is showing currently", "not expected", "incorrect", "here's the error" — put that here as 1-3 bullet points. Include visible errors. Be concise.
+
+**Visual Symptoms**
+- Any error dialogs, UI glitches, or crashes visible in the video. One or two lines.
+
+**Severity**
+- Classify as "Critical", "Major", or "Minor" with a brief justification.
+
+Output only markdown with these exact section headers. Be concise. No separate "User voice notes" section.`;
 
 const MAX_RECORDING_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -31,6 +42,7 @@ export default function RecordPage() {
   const [recordingId, setRecordingId] = useState<string | null>(null);
 
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -41,6 +53,9 @@ export default function RecordPage() {
       // Cleanup on unmount
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach((track) => track.stop());
       }
       if (timerRef.current) {
         clearInterval(timerRef.current);
@@ -57,17 +72,31 @@ export default function RecordPage() {
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
         audio: false,
       });
 
-      mediaStreamRef.current = stream;
+      let combinedStream: MediaStream;
+      try {
+        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micStreamRef.current = micStream;
+        combinedStream = new MediaStream([
+          displayStream.getVideoTracks()[0],
+          micStream.getAudioTracks()[0],
+        ]);
+      } catch {
+        micStreamRef.current = null;
+        combinedStream = displayStream;
+      }
+
+      mediaStreamRef.current = combinedStream;
       chunksRef.current = [];
 
-      const recorder = new MediaRecorder(stream, {
-        mimeType: "video/webm",
-      });
+      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
+        ? "video/webm;codecs=vp9,opus"
+        : "video/webm";
+      const recorder = new MediaRecorder(combinedStream, { mimeType });
 
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -76,7 +105,7 @@ export default function RecordPage() {
       };
 
       recorder.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: "video/webm" });
+        const blob = new Blob(chunksRef.current, { type: mimeType.split(";")[0] });
         await uploadRecording(blob);
       };
 
@@ -87,7 +116,6 @@ export default function RecordPage() {
       setTimeRemaining(MAX_RECORDING_DURATION_MS);
       startTimeRef.current = Date.now();
 
-      // Update timer every second
       timerRef.current = setInterval(() => {
         if (startTimeRef.current) {
           const elapsed = Date.now() - startTimeRef.current;
@@ -100,8 +128,7 @@ export default function RecordPage() {
         }
       }, 1000);
 
-      // Handle user stopping screen share
-      stream.getVideoTracks()[0].addEventListener("ended", () => {
+      displayStream.getVideoTracks()[0].addEventListener("ended", () => {
         stopRecording();
       });
     } catch (error) {
@@ -117,6 +144,10 @@ export default function RecordPage() {
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
+    }
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((track) => track.stop());
+      micStreamRef.current = null;
     }
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -224,6 +255,10 @@ export default function RecordPage() {
           const severityMatch = markdown.match(/severity[:\s]+(Critical|Major|Minor)/i);
           if (severityMatch) severity = severityMatch[1];
 
+          const titleMatch = markdown.match(/\*\*Title\*\*[:\s]*\n?\s*([^\n*]+?)(?=\n\n|\n\*\*|$)/i) || markdown.match(/^Title[:\s]+([^\n]+)/im);
+          const aiTitle = titleMatch ? titleMatch[1].trim() : null;
+          const reportTitle = recording.title || aiTitle || "Untitled Bug Report";
+
           const videoPublicUrl = supabase!.storage
             .from("recordings")
             .getPublicUrl(recording.storage_path).data.publicUrl;
@@ -234,7 +269,7 @@ export default function RecordPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               recordingId: recording.id,
-              title: recording.title || "Untitled Bug Report",
+              title: reportTitle,
               raw_markdown: finalMarkdown,
               severity,
             }),
@@ -349,7 +384,7 @@ export default function RecordPage() {
                   {formatTime(timeRemaining)}
                 </div>
                 <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                  Recording in progress...
+                  Recording in progress... Speak to add voice notes to the report.
                 </p>
               </div>
 

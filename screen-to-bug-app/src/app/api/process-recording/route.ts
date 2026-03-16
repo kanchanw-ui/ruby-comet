@@ -16,16 +16,27 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const genAI = new GoogleGenerativeAI(geminiApiKey);
 const fileManager = new GoogleAIFileManager(geminiApiKey);
 
-const PROMPT = `Analyze this screen recording video and generate a structured bug report in markdown format.
+const PROMPT = `You are analyzing a screen recording with optional voice narration to produce a single, coherent bug report. Combine what you SEE (user actions on screen) with what you HEAR (user's speech) into one structured report.
 
-Please extract:
-1. **Steps to Reproduce**: An ordered list of the key user interactions shown in the video that lead to the issue.
-2. **Actual Result**: Use a minimal bulleted list to describe what actually happened (error messages, visual glitches, unexpected behavior).
-3. **Expected Result**: Use a minimal bulleted list to describe what should have happened.
-4. **Visual Symptoms**: Any error dialogs, UI glitches, crashes, or other visual indicators of the problem.
-5. **Severity**: Classify as "Critical", "Major", or "Minor" with a brief justification.
+**Title**
+- First line: **Title:** followed by one short sentence summarizing the bug (e.g. "Login fails with invalid credentials error"). This is required.
 
-Format your response as markdown with clear sections. Keep the Actual and Expected results extremely concise.`;
+**Steps to Reproduce**
+- Build an ordered list that merges (1) visible user actions (clicks, navigation, inputs) and (2) brief spoken context where relevant. Keep each step to one short line. Aim for 5-7 steps maximum; do not repeat the same idea. Prefer "Click X" or "Navigate to Y" plus a brief phrase; avoid long sentences or paragraphs. Fold speech into steps only when it clarifies the action in a few words.
+
+**Expected Result**
+- Use the user's speech to infer what they expect. When they say "this should be expected", "it should show X", "expected to see Y" — put that here as 1-3 bullet points. If not stated, one brief line.
+
+**Actual Result**
+- Use the user's speech for what is wrong. When they say "this is showing currently", "not expected", "incorrect", "here's the error" — put that here as 1-3 bullet points. Include visible errors. Be concise.
+
+**Visual Symptoms**
+- Any error dialogs, UI glitches, or crashes visible in the video. One or two lines.
+
+**Severity**
+- Classify as "Critical", "Major", or "Minor" with a brief justification.
+
+Output only markdown with these exact section headers. Be concise. No separate "User voice notes" section.`;
 
 export async function POST(request: NextRequest) {
   console.log("Starting recording process...");
@@ -198,6 +209,11 @@ export async function POST(request: NextRequest) {
       severity = severityMatch[1];
     }
 
+    // Extract title from AI output (**Title:** ... or Title: ...)
+    const titleMatch = markdown.match(/\*\*Title\*\*[:\s]*\n?\s*([^\n*]+?)(?=\n\n|\n\*\*|$)/i) || markdown.match(/^Title[:\s]+([^\n]+)/im);
+    const aiTitle = titleMatch ? titleMatch[1].trim() : null;
+    const reportTitle = recording.title || aiTitle || "Untitled Bug Report";
+
     // Append video link to the markdown
     const final_markdown = `${markdown}\n\n---\n### 📹 Attachment: Screen Recording\n[▶ View Original Recording](${videoPublicUrl})`;
 
@@ -207,7 +223,7 @@ export async function POST(request: NextRequest) {
       .from("bug_reports")
       .insert({
         recording_id: recordingId,
-        title: recording.title || "Untitled Bug Report",
+        title: reportTitle,
         raw_markdown: final_markdown,
         severity: severity,
       })

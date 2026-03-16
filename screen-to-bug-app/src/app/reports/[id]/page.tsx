@@ -18,7 +18,7 @@ function markdownToPreviewText(md: string): string {
   let currentSection: "steps" | "other" | null = null;
   let stepNumber = 0;
 
-  const SECTION_NAMES = /^(Steps to Reproduce|Actual Result|Expected Result|Visual Symptoms|Severity|Attachment|📹)/i;
+  const SECTION_NAMES = /^(Title|Steps to Reproduce|Actual Result|Expected Result|Visual Symptoms|Severity|User voice notes|Spoken instructions|Attachment|📹)/i;
   const stripBold = (s: string) => s.replace(/\*\*(.+?)\*\*/g, "$1").trim();
   const isSectionHeader = (line: string): boolean => {
     const t = line.trim();
