@@ -367,6 +367,9 @@ export default function RecordPage() {
                 />
               </div>
 
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Recording includes screen + microphone. Speak while recording to add voice notes to the report.
+              </p>
               <button
                 onClick={startRecording}
                 disabled={!isSupabaseConfigured()}
